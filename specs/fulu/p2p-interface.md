@@ -350,7 +350,7 @@ The response MUST consist of zero or more `response_chunk`. Each _successful_
 `response_chunk` MUST contain a single `DataColumnSidecar` payload.
 
 Let `data_column_serve_range` be
-`[max(current_epoch - MIN_EPOCHS_FOR_DATA_COLUMN_SIDECARS_REQUESTS, FULU_FORK_EPOCH), current_epoch]`.
+`[max(finalized_epoch, current_epoch - MIN_EPOCHS_FOR_DATA_COLUMN_SIDECARS_REQUESTS, FULU_FORK_EPOCH), current_epoch]`.
 Clients MUST keep a record of data column sidecars seen on the epoch range
 `data_column_serve_range` where `current_epoch` is defined by the current
 wall-clock time, and clients MUST support serving requests of data columns on
@@ -362,8 +362,8 @@ Peers that are unable to reply to data column sidecar requests within the range
 this range of requests MAY get descored or disconnected at any time.
 
 *Note*: The above requirement implies that nodes that start from a recent weak
-subjectivity checkpoint MUST backfill the local data columns database to at
-least the range `data_column_serve_range` to be fully compliant with
+subjectivity checkpoint does not need to backfill the local data columns database
+before before the latest finalized epoch to be fully compliant with
 `DataColumnSidecarsByRange` requests.
 
 *Note*: Although clients that bootstrap from a weak subjectivity checkpoint can
