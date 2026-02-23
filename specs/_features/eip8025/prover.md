@@ -10,9 +10,7 @@
 - [Introduction](#introduction)
 - [Helpers](#helpers)
   - [New `get_execution_proof_signature`](#new-get_execution_proof_signature)
-- [Execution proof](#execution-proof)
-  - [Constructing the `SignedExecutionProof`](#constructing-the-signedexecutionproof)
-- [Honest prover relay](#honest-prover-relay)
+  - [Constructing and broadcasting the `SignedExecutionProof`](#constructing-and-broadcasting-the-signedexecutionproof)
 
 <!-- mdformat-toc end -->
 
@@ -43,48 +41,36 @@ def get_execution_proof_signature(
     return bls.Sign(privkey, signing_root)
 ```
 
-## Execution proof
+### Constructing and broadcasting the `SignedExecutionProof`
 
-### Constructing the `SignedExecutionProof`
+An honest prover that wants to generate execution proofs for beacon blocks
+coordinates with a beacon node and validator client as follows:
 
-An honest prover who is an active validator and wants to generate execution
-proofs for a `BeaconBlock` performs the following steps:
+The prover:
 
-1. Extract `NewPayloadRequest` from `BeaconBlock`:
+1. subscribes to beacon node SSE block events via
+   `GET /eth/v1/events?topics=block`.
+2. fetches the blinded block via `GET /eth/v1/beacon/blinded_blocks/{slot}`.
+3. extracts `NewPayloadRequest` from `BeaconBlock`:
    - `execution_payload = block.body.execution_payload`
    - `versioned_hashes = [kzg_commitment_to_versioned_hash(c) for c in block.body.blob_kzg_commitments]`
    - `parent_beacon_block_root = block.parent_root`
    - `execution_requests = block.body.execution_requests`
-2. Create `ProofAttributes` with desired proof types.
-3. Call
-   `proof_gen_id = proof_engine.request_proofs(new_payload_request, proof_attributes)`
-   to initiate proof generation.
-4. The proof engine generates proofs asynchronously and delivers them to the
-   prover via `POST /eth/v1/prover/execution_proofs`. Each proof is delivered
-   with its associated `proof_gen_id` to link it to the original request.
-5. Upon receiving each `ExecutionProof` with its `proof_gen_id`:
-   - Validate the proof matches a pending `proof_gen_id`.
-   - Set `message` to the `ExecutionProof`.
-   - Set `validator_index` to the prover's validator index.
-   - Sign the proof using
-     `get_execution_proof_signature(state, proof, prover_privkey)`.
-   - Broadcast the `SignedExecutionProof` on the `execution_proof` gossip topic.
+4. generates a `ExecutionProof` zkVM proof.
+5. requests a `SignedExecutionProof` to the validator client via
+   `POST /eth/v1/validator/execution_proofs`.
 
-## Honest prover relay
+Upon receiving each `ExecutionProof`, the validator client:
 
-A prover relay is a trusted intermediary that accepts unsigned execution proofs
-from proof engines and signs them for broadcast. The relay MUST be an active
-validator.
+1. sets message to the `ExecutionProof` and `validator_index` to the prover's
+   validator index.
+2. signs the proof using
+   `get_execution_proof_signature(state, proof, prover_privkey)`.
+3. returns the signed proof to the beacon node.
 
-When a prover relay receives an unsigned `ExecutionProof` via
-`POST /eth/v1/prover/execution_proofs`:
+Upon received each `SignedExecutionProof`, the beacon node
 
-1. Validate that `proof_data` is non-empty.
-2. Verify the execution proof is valid using
-   `proof_engine.verify_execution_proof(proof)`.
-3. Check the proof is not a duplicate (same `new_payload_request_root`,
+1. checks the proof is not a duplicate (same `new_payload_request_root`,
    `proof_type`).
-4. If valid and not a duplicate:
-   - Create a `SignedExecutionProof` with the relay's validator index and
-     signature.
-   - Broadcast on the `execution_proof` gossip topic.
+2. broadcasts the proof to the P2P network on the `execution_proof` gossip
+   topic.
