@@ -12,6 +12,8 @@ imports proof types from [proof-engine.md](./proof-engine.md).
 - [Table of contents](#table-of-contents)
 - [Constants](#constants)
   - [Execution](#execution)
+- [Containers](#containers)
+  - [`ProofByRootIdentifier`](#proofbyrootidentifier)
 - [Helpers](#helpers)
   - [Modified `compute_fork_version`](#modified-compute_fork_version)
 - [MetaData](#metadata)
@@ -35,9 +37,20 @@ imports proof types from [proof-engine.md](./proof-engine.md).
 
 *Note*: The execution values are not definitive.
 
-| Name                               | Value       |
-| ---------------------------------- | ----------- |
-| `MAX_EXECUTION_PROOFS_PER_PAYLOAD` | `uint64(4)` |
+| Name                               | Value                                                         |
+| ---------------------------------- | ------------------------------------------------------------- |
+| `MAX_EXECUTION_PROOFS_PER_PAYLOAD` | `uint64(4)`                                                   |
+| `MAX_REQUEST_EXECUTION_PROOFS`     | `MAX_REQUEST_BLOCKS_DENEB * MAX_EXECUTION_PROOFS_PER_PAYLOAD` |
+
+## Containers
+
+### `ProofByRootIdentifier`
+
+```python
+class ProofByRootIdentifier(Container):
+    block_root: Root
+    indices: List[uint64, MAX_EXECUTION_PROOFS_PER_PAYLOAD]
+```
 
 ## Helpers
 
@@ -143,7 +156,7 @@ Request Content:
 
 ```
 (
-  block_root: Root
+  List[ProofByRootIdentifier, MAX_REQUEST_BLOCKS_DENEB]
 )
 ```
 
@@ -151,23 +164,23 @@ Response Content:
 
 ```
 (
-  List[SignedExecutionProof, MAX_EXECUTION_PROOFS_PER_PAYLOAD]
+  List[SignedExecutionProof, MAX_REQUEST_EXECUTION_PROOFS]
 )
 ```
 
-Requests execution proofs for the given `block_root`. The response MUST contain
-all available proofs for the requested beacon block, up to
-`MAX_EXECUTION_PROOFS_PER_PAYLOAD`.
+Requests execution proofs by block root and proof indices. The response is a
+list of `SignedExecutionProof` whose length is less than or equal to
+`requested_proofs_count`, where
+`requested_proofs_count = sum(len(r.indices) for r in request)`. It may be less
+in the case that the responding peer is missing blocks or proofs.
 
-The following validations MUST pass:
+No more than `MAX_REQUEST_EXECUTION_PROOFS` may be requested at a time.
 
-- _[REJECT]_ The `block_root` is a 32-byte value.
+The response MUST consist of zero or more `response_chunk`. Each _successful_
+`response_chunk` MUST contain a single `SignedExecutionProof` payload.
 
-The response MUST contain:
-
-- All available execution proofs for the requested `block_root`.
-- The response MUST NOT contain more than `MAX_EXECUTION_PROOFS_PER_PAYLOAD`
-  proofs.
+Clients MUST respond with at least one proof, if they have it. Clients MAY limit
+the number of proofs in the response.
 
 #### GetMetaData v4
 
